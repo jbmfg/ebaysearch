@@ -1,4 +1,7 @@
 {
 	"appId": "",
-	"items": ""
+	"items": [],
+        "pushover_user" : "",
+        "pushover_token" : ""
+
 }

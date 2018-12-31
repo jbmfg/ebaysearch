@@ -1,8 +1,9 @@
 import json
 import requests
+import pickle
 
 def parse_config():
-    with open("config.json", "r") as f:
+    with open("/home/jbg/dev/ebaysearch/config.json", "r") as f:
         configs = json.load(f)
         f.close()
     return configs
@@ -32,17 +33,34 @@ def searchebay():
             } 
     items = [i for i in configs["items"]]
     for item in items:
+        with open("/home/jbg/dev/ebaysearch/old.json", "r") as f:
+            old = json.load(f)
+            f.close()
         data = {"keywords":item}
         response = session.post(url, json=data).json()
         if int(response["findItemsByKeywordsResponse"][0]["paginationOutput"][0]["totalEntries"][0]) > 0:
             results = [
-                    [item, k["title"][0], 
+                    [item, 
+                    k["title"][0], 
                     k["viewItemURL"][0], 
                     "${}".format(str(k["sellingStatus"][0]["currentPrice"][0]["__value__"]))]
                     for i in response["findItemsByKeywordsResponse"] 
                     for j in i["searchResult"] 
                     for k in j["item"]
+                    if k["viewItemURL"][0] not in old
                     ]
-            push(results, configs)
+            if len(results) > 1:
+                push(results, configs)
+                found = []
+                for i in results:
+                    found.append(i[2])
+                old.extend(found)
+                '''with open("/home/jbg/dev/ebaysearch/old.json", "r") as f:
+                    old = json.load(f)
+                    old.extend(found)
+                    f.close()'''
+                with open("/home/jbg/dev/ebaysearch/old.json", "w") as f:
+                    json.dump(old, f)
+                    f.close()
 
 searchebay()

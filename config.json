@@ -1,6 +1,12 @@
 {
 	"appId": "",
-	"items": [],
+	"working_items": [
+        ["Gamepark + GP32", "1249"]
+    ],
+	"parts_items": [
+        ["pebble", "178893"],
+        ["NES", "139971"]
+    ],
         "pushover_user" : "",
         "pushover_token" : ""
 

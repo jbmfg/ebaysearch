@@ -52,7 +52,7 @@ def parse_search_response(search_response, search_term):
             url = response_item["viewItemURL"][0]
             image_url = response_item["galleryURL"][0]
             price = response_item["sellingStatus"][0]["convertedCurrentPrice"][0]["__value__"]
-            shipping = "Calculated"
+            shipping = response_item["shippingInfo"][0]["shippingType"][0]
             if response_item["shippingInfo"][0]["shippingType"][0] == "Flat":
                 shipping = response_item["shippingInfo"][0]["shippingServiceCost"][0]["__value__"]
             list_type = "auction" if response_item["listingInfo"][0]["listingType"][0] == "Auction" else "fixed"
@@ -95,6 +95,8 @@ def search_ebay(session, search_item, condition):
     elif condition == "working":
         data.pop("itemFilter", None)
     response = session.post(url, json=data)
+    with open("benny.json", "w") as f:
+        json.dump(response.json(), f)
     if response.status_code == 200:
         response = response.json()
     return response

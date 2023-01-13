@@ -117,12 +117,10 @@ def main():
         olds = json.load(f)
     for condition in search_term_dict:
         for search_pair in search_term_dict[condition]:
-            print(search_pair[0])
             search_response = search_ebay(session, search_pair, condition)
             result = parse_search_response(search_response, search_pair[0])
             results["auction"] += result["auction"]
             results["fixed"] += result["fixed"]
-    print(json.dumps(results, indent=4))
     for sale_type in results:
         # Auction or Fixed
         for result in results[sale_type]:

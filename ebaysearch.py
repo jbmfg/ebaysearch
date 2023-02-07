@@ -39,6 +39,9 @@ def push(item, listing_type):
     url = 'https://api.pushover.net/1/messages.json'
     requests.post(url, data=post_data, files=files)
 
+def write_to_csv():
+    pass
+
 def parse_search_response(search_response, search_term):
     # Take the search response and pull out the items we want to push
     search_response = search_response["findItemsAdvancedResponse"][0]
@@ -117,7 +120,10 @@ def main():
         olds = json.load(f)
     for condition in search_term_dict:
         for search_pair in search_term_dict[condition]:
+            print(search_pair[0])
             search_response = search_ebay(session, search_pair, condition)
+            with open("results.json", "w") as f:
+                json.dump(search_response, f)
             result = parse_search_response(search_response, search_pair[0])
             results["auction"] += result["auction"]
             results["fixed"] += result["fixed"]
@@ -138,6 +144,8 @@ def main():
                         result[5] = end_time
                         push(result, sale_type)
                         update_olds(result[0])
+    with open("/media/Storage/tmp/ebay_deals.json", "w") as f:
+        json.dump(results, f)
 
 if __name__ == "__main__":
     main()

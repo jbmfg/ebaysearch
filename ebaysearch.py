@@ -3,10 +3,12 @@ import requests
 import shutil
 import os
 import base64
+from time import sleep
 from datetime import datetime
 
 def parse_config():
-    with open("/home/jbg/dev/deals/ebaysearch/config.json", "r") as f:
+    cwd = os.getcwd()
+    with open(f"{cwd}/config.json", "r") as f:
         configs = json.load(f)
         f.close()
     return configs
@@ -41,7 +43,26 @@ def push(item, listing_type):
             "sound": "cashregister"
             }
     url = 'https://api.pushover.net/1/messages.json'
-    requests.post(url, data=post_data, files=files)
+    r = requests.post(url, data=post_data, files=files)
+
+def push_digest(url="http://192.168.0.24/deals.html"):
+    configs = parse_config()
+    token = configs["pushover_token"]
+    user_key = configs["pushover_user"]
+    title = "Ebay deals ready to view"
+    message = "Click for digest"
+    post_data = {
+            "token": token,
+            "user": user_key,
+            "title": title,
+            "message": message,
+            "url": url,
+            "url_title": "Digest",
+            "sound": "siren"
+            }
+    po_url = 'https://api.pushover.net/1/messages.json'
+    sleep(10)
+    r = requests.post(po_url, data=post_data)
 
 def parse_search_response(search_response, search_term, shopping_token):
     # Take the search response and pull out the items we want to push
@@ -53,6 +74,7 @@ def parse_search_response(search_response, search_term, shopping_token):
         for response_item in search_response_items:
             item_id = response_item["itemId"][0]
             title = response_item["title"][0]
+            if search_term.lower() not in title.lower(): continue
             url = response_item["viewItemURL"][0]
             image_url = response_item["galleryURL"][0]
             price = response_item["sellingStatus"][0]["convertedCurrentPrice"][0]["__value__"]
@@ -142,26 +164,179 @@ def search_ebay(session, search_item, condition):
     elif condition == "working":
         data.pop("itemFilter", None)
     response = session.post(url, json=data)
-    with open("benny.json", "w") as f:
-        json.dump(response.json(), f)
     if response.status_code == 200:
         response = response.json()
     return response
 
 def update_olds(new_item):
     # where new_item is the ebay id of the item to add to olds.json
-    with open("/home/jbg/dev/deals/ebaysearch/old.json", "r") as f:
+    cwd = os.getcwd()
+    config_path = f"{cwd}/old.json"
+    with open(config_path, "r") as f:
         data = json.load(f)
     data.append(new_item)
-    with open("/home/jbg/dev/deals/ebaysearch/old.json", "w") as f:
+    with open(config_path, "w") as f:
         json.dump(data, f)
+
+def write_html(items):
+    cols = {}
+    for list_type in items:
+        x = 0
+        cols[list_type] = [[], [], [], []]
+        for item_id, title, url, img, price, end_dt, search_term, shipping in items[list_type]:
+            if x > 3: x = 0
+            title = f"${price} + ${shipping} - {search_term}"
+            cols[list_type][x].append(f'<a href="{url}"><img src="{img}" style="width:100%"></a><p>{title}</p>')
+            #texts.append(f'<a href="{url}"><img src="{img}" style="width:100%"></a><p>{title}</p>')
+            x += 1
+
+    html = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+
+    .header {
+      text-align: center;
+      padding: 32px;
+    }
+
+    .row {
+      display: -ms-flexbox; /* IE 10 */
+      display: flex;
+      -ms-flex-wrap: wrap; /* IE 10 */
+      flex-wrap: wrap;
+      padding: 0 4px;
+    }
+
+    /* Create two equal columns that sits next to each other */
+    .column {
+      -ms-flex: 50%; /* IE 10 */
+      flex: 50%;
+      padding: 0 4px;
+    }
+
+    .column img {
+      margin-top: 8px;
+      vertical-align: middle;
+    }
+
+    /* Style the buttons */
+    .btn {
+      border: none;
+      outline: none;
+      padding: 10px 16px;
+      background-color: #f1f1f1;
+      cursor: pointer;
+      font-size: 18px;
+    }
+
+    .btn:hover {
+      background-color: #ddd;
+    }
+
+    .btn.active {
+      background-color: #666;
+      color: white;
+    }
+    </style>
+    </head>
+    <body>
+
+    <!-- Header -->
+    <div class="header" id="myHeader">
+      <h1>JBG's Ebay Deals</h1>
+      <p>Click on the buttons to change the grid view (Mobile only supports 2 columns)</p>
+      <button class="btn" onclick="one()">1</button>
+      <button class="btn" onclick="two()">2</button>
+      <button class="btn active" onclick="four()">4</button>
+    </div>
+
+    <!-- Photo Grid -->
+    """
+    for list_type in ("fixed", "auction"):
+        if list_type not in cols: continue
+        html += f"""
+        <div class="header" id="{list_type}">
+        <h1>{list_type.title()}</h1>
+        </div>
+        <div class="row">
+        """
+        for col in cols[list_type]:
+            html += '\n<div class="column">'
+            for i in col:
+                html += f'\n{i}'
+            html += '</div>'
+        html += '</div>'
+
+    html += """
+    <script>
+    // Get the elements with class="column"
+    var elements = document.getElementsByClassName("column");
+
+    // Declare a loop variable
+    var i;
+
+    // Full-width images
+    function one() {
+        for (i = 0; i < elements.length; i++) {
+        elements[i].style.msFlex = "100%";  // IE10
+        elements[i].style.flex = "100%";
+      }
+    }
+
+    // Two images side by side
+    function two() {
+      for (i = 0; i < elements.length; i++) {
+        elements[i].style.msFlex = "50%";  // IE10
+        elements[i].style.flex = "50%";
+      }
+    }
+
+    // Four images side by side
+    function four() {
+      for (i = 0; i < elements.length; i++) {
+        elements[i].style.msFlex = "25%";  // IE10
+        elements[i].style.flex = "25%";
+      }
+    }
+
+    // Add active class to the current button (highlight it)
+    var header = document.getElementById("myHeader");
+    var btns = header.getElementsByClassName("btn");
+    for (var i = 0; i < btns.length; i++) {
+      btns[i].addEventListener("click", function() {
+        var current = document.getElementsByClassName("active");
+        current[0].className = current[0].className.replace(" active", "");
+        this.className += " active";
+      });
+    }
+
+    window.document.body.onload = four();
+    </script>
+
+    </body>
+    </html>
+    """
+    with open("/var/www/localhost/htdocs/deals.html", "w") as f:
+        f.write(html)
 
 def main():
     session = setup_session()
     shopping_token = get_token()
     search_term_dict = get_searches()
     results = {"auction": [], "fixed": []}
-    with open("/home/jbg/dev/deals/ebaysearch/old.json", "r") as f:
+    cwd = os.getcwd()
+    with open(f"{cwd}/old.json", "r") as f:
         olds = json.load(f)
     for condition in search_term_dict:
         for search_pair in search_term_dict[condition]:
@@ -171,13 +346,16 @@ def main():
             result = parse_search_response(search_response, search_pair[0], shopping_token)
             results["auction"] += result["auction"]
             results["fixed"] += result["fixed"]
+    digest = {}
     for sale_type in results:
+        digest[sale_type] = []
         # Auction or Fixed
         for result in results[sale_type]:
             if result[0] not in olds:
                 if sale_type == "fixed":
                     # just push as is
                     push(result, sale_type)
+                    digest[sale_type].append(result)
                     update_olds(result[0])
                 elif sale_type == "auction":
                     # check to see if auction ends today then push if so
@@ -187,9 +365,12 @@ def main():
                         end_time =  str((datetime.now() + (end_datetime-now)).time()).split(".")[0]
                         result[5] = end_time
                         push(result, sale_type)
+                        digest[sale_type].append(result)
                         update_olds(result[0])
-    with open("/media/Storage/tmp/ebay_deals.json", "w") as f:
+    with open(f"{cwd}/ebay_deals.json", "w") as f:
         json.dump(results, f)
+    write_html(digest)
+    push_digest()
 
 if __name__ == "__main__":
     main()

@@ -1,0 +1,22 @@
+{
+	"appId": "",
+    "client_sec" : "",
+	"working_items": [
+        ["Gamepark", "1249"]
+    ],
+	"parts_items": [
+        ["pebble", "178893"],
+        ["evercade", "139971"],
+        ["playstation + classic + mini", "139971"],
+        ["sega nomad", "139971"],
+        ["anberniC", "139971"],
+        ["gamepark + gp32", "139971"],
+        ["SNES + Classic + Mini", "139971"],
+        ["miyoo", "139971"],
+        ["game gear", "139971"],
+        ["retron + 5", "139971"]
+    ],
+        "pushover_user" : "",
+        "pushover_token" : ""
+
+}

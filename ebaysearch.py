@@ -185,8 +185,9 @@ def write_html(items):
         cols[list_type] = [[], [], [], []]
         for item_id, title, url, img, price, end_dt, search_term, shipping in items[list_type]:
             if x > 3: x = 0
-            title = f"${price} + ${shipping} - {search_term}"
-            cols[list_type][x].append(f'<a href="{url}"><img src="{img}" style="width:100%"></a><p>{title}</p>')
+            #title = f"${price} + ${shipping} - {search_term}"
+            item_title  = f"${price} + ${shipping} - {title}"
+            cols[list_type][x].append(f'<a href="{url}"><img src="{img}" style="width:100%"></a><p>{item_title}</p>')
             #texts.append(f'<a href="{url}"><img src="{img}" style="width:100%"></a><p>{title}</p>')
             x += 1
 

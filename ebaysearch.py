@@ -64,34 +64,43 @@ def push_digest(url="http://192.168.0.24/deals.html"):
     sleep(10)
     r = requests.post(po_url, data=post_data)
 
-def parse_search_response(search_response, search_term, shopping_token):
-    # Take the search response and pull out the items we want to push
-    search_response = search_response["findItemsAdvancedResponse"][0]
-    result_count = search_response["paginationOutput"][0]["totalEntries"][0]
+def parse_search_response(search_response, search_term, session):
     results = {"auction": [], "fixed": []}
-    if int(result_count) > 0:
-        search_response_items = search_response["searchResult"][0]["item"]
-        for response_item in search_response_items:
-            item_id = response_item["itemId"][0]
-            title = response_item["title"][0]
+    result_count = search_response["total"]
+    if result_count > 0:
+        items = search_response["itemSummaries"]
+        for item in items:
+            title = item["title"]
             if search_term.lower() not in title.lower(): continue
-            url = response_item["viewItemURL"][0]
-            image_url = response_item["galleryURL"][0]
-            price = response_item["sellingStatus"][0]["convertedCurrentPrice"][0]["__value__"]
-            price = '{:.2f}'.format(float(price))
-            shipping = response_item["shippingInfo"][0]["shippingType"][0]
-            if response_item["shippingInfo"][0]["shippingType"][0] == "Flat":
-                if "shippingServiceCost" in response_item["shippingInfo"][0]:
-                    shipping = response_item["shippingInfo"][0]["shippingServiceCost"][0]["__value__"]
+            item_id = item["itemId"]
+            url = item["itemWebUrl"]
+            if "thumbnailImages" in item:
+                image_url = item["thumbnailImages"][0]["imageUrl"]
+            else:
+                image_url = None
+            if "shippingOptions" in item:
+                shipping = item["shippingOptions"][0]["shippingCost"]["value"]
+            else:
+                shipping = None
+            list_types = item["buyingOptions"]
+            if all(i in list_types for i in ("FIXED_PRICE", "AUCTION")):
+                if item["bidCount"] == 0:
+                    list_type = "fixed"
                 else:
-                    shipping = 0.00
-            elif response_item["shippingInfo"][0]["shippingType"][0] == "Calculated":
-                shipping = get_shipping_cost(shopping_token, item_id)
-            list_type = "auction" if response_item["listingInfo"][0]["listingType"][0] == "Auction" else "fixed"
-            best_offer = response_item["listingInfo"][0]["bestOfferEnabled"][0]
-            if best_offer == "true":
+                    list_type = "auction"
+            elif "AUCTION" in list_types:
+                list_type = "auction"
+            elif "FIXED_PRICE" in list_types:
+                list_type = "fixed"
+            if list_type == "auction":
+                price = item["currentBidPrice"]["value"]
+                endtime = item["itemEndDate"]
+            elif list_type == "fixed":
+                price = item["price"]["value"]
+                endtime = None
+            price = '{:.2f}'.format(float(price))
+            if "BEST_OFFER" in item["buyingOptions"]:
                 price = f"{price} (OBO)"
-            endtime = response_item["listingInfo"][0]["endTime"][0]
             results[list_type].append([item_id, title, url, image_url, price, endtime, search_term, shipping])
     return results
 
@@ -104,16 +113,16 @@ def get_token():
     headers = {
             "Content-Type": "application/x-www-form-urlencoded",
             "Authorization": f"Basic {auth}"
-            }
+             }
     post_data = {
-            "grant_type": "client_credentials",
+             "grant_type": "client_credentials",
             "scope": "https://api.ebay.com/oauth/api_scope"
             }
 
     r = requests.post(url, data=post_data, headers=headers)
     return r.json()["access_token"]
 
-def get_shipping_cost(token, item_id):
+def get_shipping_cost(session, item_id):
     url = "https://open.api.ebay.com/shopping"\
     "?callname=GetShippingCosts"\
     "&responseencoding=JSON"\
@@ -124,21 +133,16 @@ def get_shipping_cost(token, item_id):
     "&DestinationPostalCode=04103"\
     "&IncludeDetails=true"\
     "&QuantitySold=1"
+    token = session.headers["Authorization"].replace("Bearer ", "")
     headers = {"X-EBAY-API-IAF-TOKEN": token}
-    r = requests.get(url, headers=headers)
+    r = session.get(url, headers=headers)
     cost = r.json()["ShippingCostSummary"]["ShippingServiceCost"]["Value"]
     return cost
 
 def setup_session():
-    # Create session and set the correct headers
+    token = get_token()
     session = requests.Session()
-    url = "https://svcs.ebay.com/services/search/FindingService/v1"
-    app_id = parse_config()["appId"]
-    session.headers = {
-            "X-EBAY-SOA-SECURITY-APPNAME":app_id,
-            "X-EBAY-SOA-REQUEST-DATA-FORMAT": "JSON",
-            "X-EBAY-SOA-OPERATION-NAME": "findItemsAdvanced"
-            }
+    session.headers = {"Authorization": f"Bearer {token}"}
     return session
 
 def get_searches():
@@ -151,21 +155,19 @@ def get_searches():
     return search_terms
 
 def search_ebay(session, search_item, condition):
-    # where search_item is [search_term, category] and condition is either working or parts
     configs = parse_config()
-    url = "https://svcs.ebay.com/services/search/FindingService/v1"
     search_term, category = search_item
-    data = {
-            "keywords":search_term,
-            "categoryId": str(category)
-            }
+    url = f"https://api.ebay.com/buy/browse/v1/item_summary/search?q={search_term}&category_ids={category}"
+    url += "&filter=buyingOptions:{AUCTION|FIXED_PRICE|BEST_OFFER}&limit=200"
     if condition == "parts":
-        data["itemFilter"] = {"name": "Condition", "value": "7000"}
+        url += "&filter=conditionIds:{7000}"
     elif condition == "working":
-        data.pop("itemFilter", None)
-    response = session.post(url, json=data)
-    if response.status_code == 200:
-        response = response.json()
+        pass
+        #url += "filter=conditionIds:{}"
+    session.headers["X-EBAY-C-ENDUSERCTX"] = "contextualLocation=country%3DUS%2Czip%3D04103"
+    r = session.get(url)
+    if r.status_code == 200:
+        response = r.json()
     return response
 
 def update_olds(new_item):
@@ -344,7 +346,7 @@ def main():
             search_response = search_ebay(session, search_pair, condition)
             with open("results.json", "w") as f:
                 json.dump(search_response, f)
-            result = parse_search_response(search_response, search_pair[0], shopping_token)
+            result = parse_search_response(search_response, search_pair[0], session)
             results["auction"] += result["auction"]
             results["fixed"] += result["fixed"]
     digest = {}
